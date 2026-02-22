@@ -7,7 +7,8 @@ from werkzeug.utils import secure_filename
 from config import Config
 from models import (db, Personnel, Certificate, Performance, PerformanceFile,
                     CompanyAttachment, BidProject, BidPersonnel, BidPerformance, BidSection)
-from tender_parser import parse_tender_file, parse_tender_file_dual, get_default_sections
+from tender_parser import (parse_tender_file, parse_tender_file_dual, get_default_sections,
+                           parse_requirements_file, match_requirements_to_sections)
 from section_matcher import auto_match_all_sections, match_attachment, match_personnel, match_performance
 
 app = Flask(__name__)
@@ -522,8 +523,18 @@ def bid_list():
 @app.route('/bids/add', methods=['GET', 'POST'])
 def bid_add():
     if request.method == 'POST':
+        # 保存格式模板文件
+        format_file = request.files.get('format_file')
+        format_path = save_upload(format_file, 'attachments') if format_file and format_file.filename else None
+
+        # 保存要求文档文件
+        requirements_file = request.files.get('requirements_file')
+        requirements_path = save_upload(requirements_file, 'attachments') if requirements_file and requirements_file.filename else None
+
+        # 兼容旧的单文件上传
         tender_file = request.files.get('tender_file')
-        tender_path = save_upload(tender_file, 'attachments')
+        tender_path = save_upload(tender_file, 'attachments') if tender_file and tender_file.filename else None
+
         bid = BidProject(
             project_name=request.form.get('project_name'),
             bidder_name=request.form.get('bidder_name'),
@@ -534,6 +545,8 @@ def bid_add():
             project_type=request.form.get('project_type'),
             industry_tags=request.form.get('industry_tags'),
             tender_file_path=tender_path,
+            format_file_path=format_path,
+            requirements_file_path=requirements_path,
             tender_requirements=request.form.get('tender_requirements', '').strip(),
             tender_format=request.form.get('tender_format', '').strip(),
             status='parsing',
@@ -542,14 +555,62 @@ def bid_add():
         db.session.add(bid)
         db.session.commit()
 
-        # 如果上传了招标文件，自动解析（双模式）
-        if tender_path:
+        # 新流程：双文件模式（格式模板 + 要求文档）
+        if format_path:
+            from format_parser import parse_format_template
+            fmt_full = os.path.join(app.config['UPLOAD_FOLDER'], format_path)
+            fmt_result = parse_format_template(fmt_full)
+
+            # 解析要求文档
+            req_result = None
+            section_requirements = {}
+            if requirements_path:
+                req_full = os.path.join(app.config['UPLOAD_FOLDER'], requirements_path)
+                req_result = parse_requirements_file(req_full)
+                if req_result.get('success'):
+                    bid.tender_requirements = req_result['full_text']
+                    db.session.commit()
+
+            if fmt_result['success']:
+                # 将格式模板解析结果与要求匹配
+                if req_result and req_result.get('success'):
+                    section_requirements = match_requirements_to_sections(
+                        req_result, fmt_result['sections'])
+
+                # 构建章节数据（含格式模板定位信息）
+                parsed_sections = []
+                for sec in fmt_result['sections']:
+                    req_text = section_requirements.get(sec['section_name'], '') or \
+                               section_requirements.get(sec['section_type'], '')
+                    parsed_sections.append({
+                        'order': sec['order'],
+                        'section_name': sec['section_name'],
+                        'section_type': sec['section_type'],
+                        'category': sec['category'],
+                        'match_score': sec['match_score'],
+                        'original_text': sec['heading_text'],
+                        'requirement_text': req_text,
+                        'format_heading_text': sec['heading_text'],
+                        'format_para_index': sec['para_index'],
+                    })
+
+                session['parsed_sections'] = parsed_sections
+                session['parsed_context'] = ''
+                session['parsed_message'] = fmt_result['message']
+                session['parsed_requirements'] = bid.tender_requirements or ''
+                session['section_requirements'] = section_requirements
+                flash(f'格式模板解析成功：{fmt_result["message"]}', 'success')
+                return redirect(url_for('bid_confirm_sections', id=bid.id))
+            else:
+                flash(f'格式模板解析提示：{fmt_result["message"]}，已加载默认章节', 'warning')
+
+        # 兼容旧流程：单文件模式
+        elif tender_path:
             ext = tender_path.rsplit('.', 1)[-1].lower() if '.' in tender_path else ''
             if ext in TENDER_EXTENSIONS:
                 full_path = os.path.join(app.config['UPLOAD_FOLDER'], tender_path)
                 result = parse_tender_file_dual(full_path)
                 if result['success']:
-                    # 保存解析出的要求和格式文本（仅当用户未手动填写时）
                     if not bid.tender_requirements and result.get('requirements'):
                         bid.tender_requirements = result['requirements']
                     if not bid.tender_format and result.get('format_text'):
@@ -566,7 +627,7 @@ def bid_add():
                 else:
                     flash(f'招标文件解析提示：{result["message"]}，已加载默认章节', 'warning')
 
-        # 解析失败或未上传招标文件，使用默认章节
+        # 解析失败或未上传文件，使用默认章节
         default_secs = get_default_sections()
         session['parsed_sections'] = default_secs
         session['parsed_context'] = ''
@@ -592,11 +653,19 @@ def bid_confirm_sections(id):
         types = request.form.getlist('section_type')
         originals = request.form.getlist('original_text')
         req_texts = request.form.getlist('requirement_text')
+        heading_texts = request.form.getlist('format_heading_text')
+        para_indices = request.form.getlist('format_para_index')
 
         for i, name in enumerate(names):
             name = name.strip()
             if not name:
                 continue
+            para_idx = None
+            if i < len(para_indices) and para_indices[i]:
+                try:
+                    para_idx = int(para_indices[i])
+                except (ValueError, TypeError):
+                    pass
             sec = BidSection(
                 bid_project_id=bid.id,
                 section_key=f'section_{i+1}',
@@ -606,6 +675,8 @@ def bid_confirm_sections(id):
                 source='parsed' if (originals[i] if i < len(originals) else '') else 'manual',
                 original_requirement=originals[i] if i < len(originals) else '',
                 requirement_text=req_texts[i] if i < len(req_texts) else '',
+                format_heading_text=heading_texts[i] if i < len(heading_texts) else '',
+                format_para_index=para_idx,
                 status='pending',
             )
             db.session.add(sec)
@@ -654,35 +725,83 @@ def bid_confirm_sections(id):
 
 @app.route('/bids/<int:id>/reparse', methods=['POST'])
 def bid_reparse(id):
-    """重新解析招标文件"""
+    """重新解析招标文件（优先格式模板，兼容旧单文件）"""
     bid = BidProject.query.get_or_404(id)
-    if not bid.tender_file_path:
-        flash('未上传招标文件，无法解析', 'danger')
-        return redirect(url_for('bid_confirm_sections', id=bid.id))
 
-    full_path = os.path.join(app.config['UPLOAD_FOLDER'], bid.tender_file_path)
-    result = parse_tender_file_dual(full_path)
-    if result['success']:
-        # 更新项目的要求和格式文本
-        if result.get('requirements'):
-            bid.tender_requirements = result['requirements']
-        if result.get('format_text'):
-            bid.tender_format = result['format_text']
-        db.session.commit()
+    # 新流程：格式模板重新解析
+    if bid.format_file_path:
+        from format_parser import parse_format_template
+        fmt_full = os.path.join(app.config['UPLOAD_FOLDER'], bid.format_file_path)
+        fmt_result = parse_format_template(fmt_full)
 
-        session['parsed_sections'] = result['sections']
-        session['parsed_context'] = result.get('raw_context', '')
-        session['parsed_message'] = result['message']
-        session['parsed_requirements'] = result.get('requirements', '')
-        session['section_requirements'] = result.get('section_requirements', {})
-        flash(f'重新解析成功：{result["message"]}', 'success')
-    else:
-        flash(f'解析失败：{result["message"]}', 'warning')
-        session['parsed_sections'] = get_default_sections()
-        session['parsed_context'] = result.get('raw_context', '')
-        session['parsed_message'] = result['message']
-        session['section_requirements'] = {}
+        req_result = None
+        section_requirements = {}
+        if bid.requirements_file_path:
+            req_full = os.path.join(app.config['UPLOAD_FOLDER'], bid.requirements_file_path)
+            req_result = parse_requirements_file(req_full)
+            if req_result.get('success'):
+                bid.tender_requirements = req_result['full_text']
+                db.session.commit()
 
+        if fmt_result['success']:
+            if req_result and req_result.get('success'):
+                section_requirements = match_requirements_to_sections(
+                    req_result, fmt_result['sections'])
+
+            parsed_sections = []
+            for sec in fmt_result['sections']:
+                req_text = section_requirements.get(sec['section_name'], '') or \
+                           section_requirements.get(sec['section_type'], '')
+                parsed_sections.append({
+                    'order': sec['order'],
+                    'section_name': sec['section_name'],
+                    'section_type': sec['section_type'],
+                    'category': sec['category'],
+                    'match_score': sec['match_score'],
+                    'original_text': sec['heading_text'],
+                    'requirement_text': req_text,
+                    'format_heading_text': sec['heading_text'],
+                    'format_para_index': sec['para_index'],
+                })
+
+            session['parsed_sections'] = parsed_sections
+            session['parsed_context'] = ''
+            session['parsed_message'] = fmt_result['message']
+            session['parsed_requirements'] = bid.tender_requirements or ''
+            session['section_requirements'] = section_requirements
+            flash(f'重新解析成功：{fmt_result["message"]}', 'success')
+            return redirect(url_for('bid_confirm_sections', id=bid.id))
+        else:
+            flash(f'格式模板解析失败：{fmt_result["message"]}', 'warning')
+
+    # 旧流程：单文件重新解析
+    if bid.tender_file_path:
+        full_path = os.path.join(app.config['UPLOAD_FOLDER'], bid.tender_file_path)
+        result = parse_tender_file_dual(full_path)
+        if result['success']:
+            if result.get('requirements'):
+                bid.tender_requirements = result['requirements']
+            if result.get('format_text'):
+                bid.tender_format = result['format_text']
+            db.session.commit()
+
+            session['parsed_sections'] = result['sections']
+            session['parsed_context'] = result.get('raw_context', '')
+            session['parsed_message'] = result['message']
+            session['parsed_requirements'] = result.get('requirements', '')
+            session['section_requirements'] = result.get('section_requirements', {})
+            flash(f'重新解析成功：{result["message"]}', 'success')
+            return redirect(url_for('bid_confirm_sections', id=bid.id))
+        else:
+            flash(f'解析失败：{result["message"]}', 'warning')
+
+    # 都失败了
+    if not bid.format_file_path and not bid.tender_file_path:
+        flash('未上传格式模板或招标文件，无法解析', 'danger')
+    session['parsed_sections'] = get_default_sections()
+    session['parsed_context'] = ''
+    session['parsed_message'] = '使用默认章节结构'
+    session['section_requirements'] = {}
     return redirect(url_for('bid_confirm_sections', id=bid.id))
 
 
@@ -724,6 +843,32 @@ def bid_edit(id):
         bid.tender_requirements = request.form.get('tender_requirements', '').strip()
         bid.tender_format = request.form.get('tender_format', '').strip()
         bid.notes = request.form.get('notes')
+
+        # 更新格式模板文件
+        format_file = request.files.get('format_file')
+        if format_file and format_file.filename:
+            new_path = save_upload(format_file, 'attachments')
+            if new_path:
+                if bid.format_file_path:
+                    try:
+                        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], bid.format_file_path))
+                    except OSError:
+                        pass
+                bid.format_file_path = new_path
+
+        # 更新要求文档文件
+        requirements_file = request.files.get('requirements_file')
+        if requirements_file and requirements_file.filename:
+            new_path = save_upload(requirements_file, 'attachments')
+            if new_path:
+                if bid.requirements_file_path:
+                    try:
+                        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], bid.requirements_file_path))
+                    except OSError:
+                        pass
+                bid.requirements_file_path = new_path
+
+        # 兼容旧的单文件上传
         tender_file = request.files.get('tender_file')
         if tender_file and tender_file.filename:
             new_path = save_upload(tender_file, 'attachments')
@@ -885,6 +1030,7 @@ def bid_section_edit(bid_id, section_id):
 # =============================================================================
 
 from section_generators import generate_full_bid, generate_section_preview
+from template_filler import generate_filled_document
 import tempfile
 
 
@@ -906,10 +1052,29 @@ def bid_section_preview(bid_id, section_id):
 @app.route('/bids/<int:bid_id>/preview')
 @login_required
 def bid_preview(bid_id):
-    """生成整个投标文件预览"""
+    """生成整个投标文件预览（优先使用格式模板填充，否则回退到从零生成）"""
     bid = BidProject.query.get_or_404(bid_id)
-
     os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+
+    safe_name = bid.project_name.replace('/', '_')[:50]
+
+    # 新流程：有格式模板文件时，使用模板填充引擎
+    if bid.format_file_path:
+        fmt_full = os.path.join(app.config['UPLOAD_FOLDER'], bid.format_file_path)
+        if os.path.exists(fmt_full):
+            sections_db = BidSection.query.filter_by(bid_project_id=bid.id)\
+                .order_by(BidSection.section_order).all()
+            try:
+                doc, output_path = generate_filled_document(
+                    fmt_full, bid, sections_db, app.config)
+                bid.output_file_path = output_path
+                db.session.commit()
+                return send_file(output_path, as_attachment=True,
+                                 download_name=f'{safe_name}_投标文件.docx')
+            except Exception as e:
+                flash(f'模板填充失败，回退到标准生成：{e}', 'warning')
+
+    # 旧流程回退：从零生成
     doc = generate_full_bid(bid, app.config)
     tmp = tempfile.NamedTemporaryFile(suffix='.docx', delete=False, dir=app.config['OUTPUT_FOLDER'])
     doc.save(tmp.name)
@@ -917,7 +1082,6 @@ def bid_preview(bid_id):
     bid.output_file_path = tmp.name
     db.session.commit()
 
-    safe_name = bid.project_name.replace('/', '_')[:50]
     return send_file(tmp.name, as_attachment=True,
                      download_name=f'{safe_name}_投标文件预览.docx')
 
