@@ -609,3 +609,57 @@ def generate_filled_document(format_file_path, bid, sections_db, app_config=None
     filled_doc.save(output_path)
 
     return filled_doc, output_path
+
+
+def extract_section_from_template(format_file_path, para_start, para_end):
+    """
+    从格式模板中原样提取指定章节，生成独立的 .docx 文件。
+    严格保留原始字体、排版、表格等所有格式。
+
+    Args:
+        format_file_path: 格式模板文件路径
+        para_start: 章节起始段落索引（含标题）
+        para_end: 章节结束段落索引（不含）
+
+    Returns:
+        Document: 包含该章节原始内容的新文档
+    """
+    from lxml import etree
+
+    src_doc = Document(format_file_path)
+    new_doc = Document()
+
+    # 复制页面设置（页边距、纸张大小等）
+    src_section = src_doc.sections[0]
+    new_section = new_doc.sections[0]
+    new_section.page_width = src_section.page_width
+    new_section.page_height = src_section.page_height
+    new_section.top_margin = src_section.top_margin
+    new_section.bottom_margin = src_section.bottom_margin
+    new_section.left_margin = src_section.left_margin
+    new_section.right_margin = src_section.right_margin
+
+    # 删除新文档中默认的空段落
+    for p in new_doc.paragraphs:
+        p._element.getparent().remove(p._element)
+
+    # 遍历源文档 body 的子元素，按段落计数定位范围，原样复制
+    src_body = src_doc.element.body
+    new_body = new_doc.element.body
+    para_count = 0
+
+    for child in src_body:
+        tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+
+        if tag == 'p':
+            if para_start <= para_count < para_end:
+                new_body.append(copy.deepcopy(child))
+            para_count += 1
+        elif tag == 'tbl':
+            # 表格位于 para_count 对应位置
+            if para_start <= para_count <= para_end:
+                new_body.append(copy.deepcopy(child))
+        elif tag == 'sectPr':
+            pass  # 跳过节属性，已单独处理
+
+    return new_doc

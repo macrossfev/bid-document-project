@@ -1075,18 +1075,43 @@ def bid_section_edit(bid_id, section_id):
 # =============================================================================
 
 from section_generators import generate_full_bid, generate_section_preview
-from template_filler import generate_filled_document
+from template_filler import generate_filled_document, extract_section_from_template
 import tempfile
 
 
 @app.route('/bids/<int:bid_id>/section/<int:section_id>/preview')
 @login_required
 def bid_section_preview(bid_id, section_id):
-    """生成单个章节预览"""
+    """生成单个章节预览（有格式模板时原样提取，否则从零生成）"""
     bid = BidProject.query.get_or_404(bid_id)
     section = BidSection.query.get_or_404(section_id)
-
     os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+
+    # 有格式模板且有段落定位信息时，从模板原样提取
+    if bid.format_file_path and section.format_para_index is not None:
+        fmt_full = os.path.join(app.config['UPLOAD_FOLDER'], bid.format_file_path)
+        if os.path.exists(fmt_full):
+            # 计算章节结束位置：下一个章节的起始位置
+            next_sec = BidSection.query.filter(
+                BidSection.bid_project_id == bid.id,
+                BidSection.section_order > section.section_order,
+                BidSection.format_para_index.isnot(None)
+            ).order_by(BidSection.section_order).first()
+
+            para_end = next_sec.format_para_index if next_sec else None
+            if para_end is None:
+                from docx import Document as DocxDocument
+                para_end = len(DocxDocument(fmt_full).paragraphs)
+
+            try:
+                doc = extract_section_from_template(fmt_full, section.format_para_index, para_end)
+                tmp = tempfile.NamedTemporaryFile(suffix='.docx', delete=False, dir=app.config['OUTPUT_FOLDER'])
+                doc.save(tmp.name)
+                return send_file(tmp.name, as_attachment=True,
+                                 download_name=f'{section.section_name}.docx')
+            except Exception:
+                pass  # 回退到旧方式
+
     doc = generate_section_preview(section, bid, app.config)
     tmp = tempfile.NamedTemporaryFile(suffix='.docx', delete=False, dir=app.config['OUTPUT_FOLDER'])
     doc.save(tmp.name)
