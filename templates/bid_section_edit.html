@@ -177,11 +177,46 @@
 
             <div class="card mb-4">
                 <div class="card-header bg-white">
-                    <h6 class="mb-0"><i class="bi bi-pencil"></i> 自定义备注</h6>
+                    <h6 class="mb-0"><i class="bi bi-pencil-square"></i> 章节内容编辑</h6>
                 </div>
                 <div class="card-body">
-                    <textarea class="form-control" name="custom_content" rows="6"
-                              placeholder="在此添加该章节的备注、修改说明或自定义内容...">{{ section.custom_content|default('', true) }}</textarea>
+                    <textarea class="form-control" name="custom_content" rows="15"
+                              style="font-size: 0.9rem; line-height: 1.6;"
+                              placeholder="在此直接输入或粘贴该章节的内容，生成文档时将填入对应位置...">{{ section.custom_content|default('', true) }}</textarea>
+                    <div class="form-text">此处内容将在生成投标文件时填入该章节对应位置</div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-arrow-down-up"></i> 下载 / 上传章节文件</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted">下载当前章节内容</label>
+                            <div>
+                                <a href="{{ url_for('bid_section_preview', bid_id=bid.id, section_id=section.id) }}"
+                                   class="btn btn-outline-success w-100" target="_blank">
+                                    <i class="bi bi-download"></i> 下载章节文档
+                                </a>
+                            </div>
+                            <div class="form-text">下载后可在 Word 中编辑，编辑完成后上传</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted">上传编辑好的文件</label>
+                            <input type="file" class="form-control" name="section_file" accept=".doc,.docx,.pdf,.png,.jpg,.jpeg">
+                            <div class="form-text">上传后将自动关联到本章节</div>
+                        </div>
+                    </div>
+                    {% if section.attachment and section.attachment.file_path %}
+                    <div class="alert alert-info py-2 small mt-3 mb-0">
+                        <i class="bi bi-paperclip"></i> 当前文件：
+                        <a href="{{ url_for('uploaded_file', filename=section.attachment.file_path) }}" target="_blank">
+                            <strong>{{ section.attachment.name }}</strong>
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

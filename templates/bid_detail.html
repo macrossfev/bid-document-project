@@ -114,6 +114,12 @@
                     </span>
                     <span class="toc-edit text-primary ms-auto"><i class="bi bi-pencil-square"></i></span>
                 </a>
+                <span class="toc-actions d-flex align-items-center gap-1">
+                    <a href="{{ url_for('bid_section_preview', bid_id=bid.id, section_id=sec.id) }}"
+                       class="btn btn-sm btn-outline-success" title="下载章节" target="_blank"><i class="bi bi-download"></i></a>
+                    <button type="button" class="btn btn-sm btn-outline-primary upload-section-btn"
+                            data-section-id="{{ sec.id }}" title="上传文件"><i class="bi bi-upload"></i></button>
+                </span>
                 <form method="POST" action="{{ url_for('bid_section_delete', bid_id=bid.id, section_id=sec.id) }}" class="toc-delete"
                       onsubmit="return confirm('确定删除章节「{{ sec.section_name }}」？');">
                     <button type="submit" class="btn btn-sm text-danger" title="删除章节"><i class="bi bi-trash"></i></button>
@@ -177,6 +183,10 @@
         </div>
     </div>
 </div>
+<!-- 隐藏的快捷上传表单 -->
+<form id="quickUploadForm" method="POST" enctype="multipart/form-data" style="display:none;">
+    <input type="file" id="quickUploadFile" name="section_file" accept=".doc,.docx,.pdf,.png,.jpg,.jpeg">
+</form>
 {% endblock %}
 
 {% block extra_css %}
@@ -208,6 +218,8 @@ a.toc-item {
 .toc-desc .badge { font-weight: 400; font-size: 0.78rem; margin: 1px 2px; }
 .toc-edit { flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
 .toc-item-wrapper:hover .toc-edit { opacity: 1; }
+.toc-actions { flex-shrink: 0; padding: 0 4px; opacity: 0; transition: opacity 0.15s; }
+.toc-item-wrapper:hover .toc-actions { opacity: 1; }
 .toc-delete { flex-shrink: 0; padding: 0 8px; opacity: 0; transition: opacity 0.15s; }
 .toc-item-wrapper:hover .toc-delete { opacity: 1; }
 </style>
@@ -254,5 +266,24 @@ if (tocList) {
         });
     });
 }
+
+// 快捷上传
+document.querySelectorAll('.upload-section-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const sectionId = this.dataset.sectionId;
+        const form = document.getElementById('quickUploadForm');
+        const fileInput = document.getElementById('quickUploadFile');
+        form.action = `/bids/{{ bid.id }}/section/${sectionId}/quick-upload`;
+        fileInput.value = '';
+        fileInput.click();
+    });
+});
+document.getElementById('quickUploadFile').addEventListener('change', function() {
+    if (this.files.length > 0) {
+        document.getElementById('quickUploadForm').submit();
+    }
+});
 </script>
 {% endblock %}

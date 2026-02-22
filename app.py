@@ -926,6 +926,35 @@ def bid_section_delete(bid_id, section_id):
     return redirect(url_for('bid_detail', id=bid_id))
 
 
+@app.route('/bids/<int:bid_id>/section/<int:section_id>/quick-upload', methods=['POST'])
+def bid_section_quick_upload(bid_id, section_id):
+    """章节列表页快捷上传文件"""
+    bid = BidProject.query.get_or_404(bid_id)
+    section = BidSection.query.get_or_404(section_id)
+    section_file = request.files.get('section_file')
+    if section_file and section_file.filename:
+        file_path = save_upload(section_file, 'attachments')
+        if file_path:
+            from tender_parser import SECTION_KEYWORD_MAP
+            category = '其他'
+            for stype, info in SECTION_KEYWORD_MAP.items():
+                if stype == section.section_type:
+                    category = info['category']
+                    break
+            att_name = f'{section.section_name}_{section_file.filename}'
+            new_att = CompanyAttachment(
+                name=att_name, category=category, file_path=file_path)
+            db.session.add(new_att)
+            db.session.flush()
+            section.attachment_id = new_att.id
+            section.status = 'done'
+            db.session.commit()
+            flash(f'"{section.section_name}" 文件已上传', 'success')
+        else:
+            flash('文件上传失败', 'danger')
+    return redirect(url_for('bid_detail', id=bid.id))
+
+
 @app.route('/bids/<int:bid_id>/sections/reorder', methods=['POST'])
 def bid_sections_reorder(bid_id):
     """拖拽排序章节"""
@@ -970,6 +999,22 @@ def bid_section_edit(bid_id, section_id):
 
     if request.method == 'POST':
         section.section_name = request.form.get('section_name', section.section_name)
+
+        # 处理章节文件上传（下载编辑后回传）
+        section_file = request.files.get('section_file')
+        if section_file and section_file.filename:
+            file_path = save_upload(section_file, 'attachments')
+            if file_path:
+                sf_name = f'{section.section_name}_{section_file.filename}'
+                new_att = CompanyAttachment(
+                    name=sf_name,
+                    category=suggested_category,
+                    file_path=file_path,
+                )
+                db.session.add(new_att)
+                db.session.flush()
+                section.attachment_id = new_att.id
+                flash(f'章节文件已上传：{sf_name}', 'success')
 
         # 处理上传新文件：自动创建附件记录并关联
         upload_file = request.files.get('upload_file')
