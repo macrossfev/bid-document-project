@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}业绩库 - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h3 class="mb-0"><i class="bi bi-trophy"></i> 业绩库</h3>
+    <a href="{{ url_for('performance_add') }}" class="btn btn-success">
+        <i class="bi bi-plus-lg"></i> 添加业绩
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('performance_list') }}">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-8 col-lg-9">
+                    <label for="q" class="form-label">搜索业绩</label>
+                    <input type="text" class="form-control" id="q" name="q"
+                           value="{{ q|default('', true) }}"
+                           placeholder="输入项目名称、委托单位、服务类型或检测参数进行搜索...">
+                </div>
+                <div class="col-md-4 col-lg-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-success flex-grow-1">
+                        <i class="bi bi-search"></i> 搜索
+                    </button>
+                    {% if q %}
+                    <a href="{{ url_for('performance_list') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg"></i> 清除
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        {% if performances %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>项目名称</th>
+                        <th>委托单位</th>
+                        <th>合同金额(万元)</th>
+                        <th>服务时间</th>
+                        <th>服务类型</th>
+                        <th style="width:180px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for perf in performances %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('performance_detail', id=perf.id) }}" class="text-decoration-none fw-semibold">
+                                {{ perf.project_name }}
+                            </a>
+                        </td>
+                        <td>{{ perf.client_name|default('-', true) }}</td>
+                        <td>{{ "%.2f"|format(perf.contract_amount) if perf.contract_amount else '-' }}</td>
+                        <td>
+                            {{ perf.service_start.strftime('%Y-%m-%d') if perf.service_start else '' }}
+                            {% if perf.service_start and perf.service_end %} ~ {% endif %}
+                            {{ perf.service_end.strftime('%Y-%m-%d') if perf.service_end else '' }}
+                            {% if not perf.service_start and not perf.service_end %}-{% endif %}
+                        </td>
+                        <td>
+                            {% if perf.service_types %}
+                                {% for st in perf.service_types.split(',')[:2] %}
+                                <span class="badge bg-light text-dark border">{{ st.strip() }}</span>
+                                {% endfor %}
+                                {% if perf.service_types.split(',')|length > 2 %}
+                                <span class="text-muted small">+{{ perf.service_types.split(',')|length - 2 }}</span>
+                                {% endif %}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('performance_detail', id=perf.id) }}" class="btn btn-outline-primary" title="查看">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('performance_edit', id=perf.id) }}" class="btn btn-outline-secondary" title="编辑">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('performance_delete', id=perf.id) }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="删除"
+                                            onclick="return confirm('确定要删除吗？')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox" style="font-size:3rem;"></i>
+            <p class="mt-2">
+                {% if q %}未找到与 "{{ q }}" 相关的业绩记录{% else %}暂无业绩数据，点击上方按钮添加{% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

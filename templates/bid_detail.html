@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}{{ bid.project_name }} - 标书制作系统{% endblock %}
+
+{% block content %}
+<!-- 项目头部 -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h4 class="mb-1">{{ bid.project_name }}</h4>
+        <div class="text-muted small">
+            {% if bid.bidder_name %}招标人：{{ bid.bidder_name }}{% endif %}
+            {% if bid.agent_name %} | 代理机构：{{ bid.agent_name }}{% endif %}
+            {% if bid.service_period %} | 服务期：{{ bid.service_period }}{% endif %}
+            {% if bid.project_type %} | 类型：{{ bid.project_type }}{% endif %}
+        </div>
+        {% if bid.industry_tags %}
+        <div class="mt-1">
+            {% for tag in bid.industry_tags.split(',') %}
+            <span class="badge bg-info-subtle text-info me-1">{{ tag.strip() }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div>
+        <a href="{{ url_for('bid_preview', bid_id=bid.id) }}" class="btn btn-sm btn-success me-1" title="生成完整投标文件预览"><i class="bi bi-file-earmark-word"></i> 生成预览</a>
+        <form method="POST" action="{{ url_for('bid_auto_match', id=bid.id) }}" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-outline-info me-1" title="重新执行自动匹配"><i class="bi bi-magic"></i> 自动匹配</button>
+        </form>
+        <a href="{{ url_for('bid_edit', id=bid.id) }}" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i> 编辑</a>
+        <a href="{{ url_for('bid_list') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回</a>
+    </div>
+</div>
+
+<!-- 进度概览 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-center py-3">
+            <div class="text-info"><i class="bi bi-flag-fill fs-4"></i></div>
+            <div class="fw-bold fs-5 mt-1">
+                {% if bid.status == 'draft' %}草稿
+                {% elif bid.status == 'parsing' %}解析中
+                {% elif bid.status == 'in_progress' %}进行中
+                {% elif bid.status == 'completed' %}已完成
+                {% else %}{{ bid.status }}{% endif %}
+            </div>
+            <div class="text-muted small">项目状态</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center py-3">
+            <div class="text-success"><i class="bi bi-check2-circle fs-4"></i></div>
+            <div class="fw-bold fs-5 mt-1">{{ done_sections }} / {{ total_sections }}</div>
+            <div class="text-muted small">章节完成</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center py-3">
+            <div class="text-primary"><i class="bi bi-calendar-event fs-4"></i></div>
+            <div class="fw-bold fs-5 mt-1">{{ bid.deadline.strftime('%m-%d %H:%M') if bid.deadline else '-' }}</div>
+            <div class="text-muted small">截止时间</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center py-3">
+            <div class="text-warning"><i class="bi bi-file-earmark-text fs-4"></i></div>
+            <div class="fw-bold fs-5 mt-1">
+                {% if bid.tender_file_path %}
+                <a href="{{ url_for('uploaded_file', filename=bid.tender_file_path) }}" target="_blank" class="text-decoration-none">查看</a>
+                {% else %}-{% endif %}
+            </div>
+            <div class="text-muted small">招标文件</div>
+        </div>
+    </div>
+</div>
+
+<!-- 投标文件目录 -->
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-journal-bookmark"></i> 投标文件目录 <span class="text-muted small fw-normal">（点击章节编辑，拖拽排序）</span></h6>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addSectionModal">
+            <i class="bi bi-plus-lg"></i> 添加章节
+        </button>
+    </div>
+    <div class="card-body p-0">
+        {% if sections %}
+        <div class="toc" id="tocList">
+            {% for sec in sections %}
+            <div class="toc-item-wrapper" draggable="true" data-id="{{ sec.id }}">
+                <a href="{{ url_for('bid_section_edit', bid_id=bid.id, section_id=sec.id) }}" class="toc-item text-decoration-none d-flex">
+                    <span class="toc-drag text-muted me-2" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></span>
+                    <span class="toc-icon {% if sec.status == 'done' %}text-success{% else %}text-secondary{% endif %}">
+                        <i class="bi bi-{% if sec.status == 'done' %}check-circle-fill{% else %}circle{% endif %}"></i>
+                    </span>
+                    <span class="toc-order text-muted me-2">{{ sec.section_order }}.</span>
+                    <span class="toc-name text-dark">{{ sec.section_name }}</span>
+                    <span class="toc-desc">
+                        {% if sec.section_type %}
+                        <span class="badge bg-primary-subtle text-primary">{{ sec.section_type }}</span>
+                        {% endif %}
+                        {% if sec.attachment %}
+                            <span class="badge bg-info-subtle text-info">{{ sec.attachment.name }}</span>
+                        {% endif %}
+                        {% if sec.match_score and sec.match_score >= 60 %}
+                            <span class="badge bg-success-subtle text-success">匹配{{ sec.match_score|int }}%</span>
+                        {% endif %}
+                        {% if sec.source == 'parsed' %}
+                            <span class="badge bg-purple-subtle text-purple" style="background:#f3e8ff!important;color:#7c3aed!important;">自动解析</span>
+                        {% endif %}
+                        {% if sec.status == 'done' %}
+                            <span class="badge bg-success-subtle text-success">已完成</span>
+                        {% else %}
+                            <span class="badge bg-warning-subtle text-warning">待完善</span>
+                        {% endif %}
+                    </span>
+                    <span class="toc-edit text-primary ms-auto"><i class="bi bi-pencil-square"></i></span>
+                </a>
+                <form method="POST" action="{{ url_for('bid_section_delete', bid_id=bid.id, section_id=sec.id) }}" class="toc-delete"
+                      onsubmit="return confirm('确定删除章节「{{ sec.section_name }}」？');">
+                    <button type="submit" class="btn btn-sm text-danger" title="删除章节"><i class="bi bi-trash"></i></button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1"></i>
+            <p class="mt-2">暂无章节，请添加或上传招标文件自动解析</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if bid.notes %}
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-sticky"></i> 备注</h6></div>
+    <div class="card-body"><p class="mb-0">{{ bid.notes }}</p></div>
+</div>
+{% endif %}
+
+<!-- 添加章节弹窗 -->
+<div class="modal fade" id="addSectionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('bid_section_add', bid_id=bid.id) }}">
+                <div class="modal-header">
+                    <h6 class="modal-title">添加章节</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">章节名称</label>
+                        <input type="text" class="form-control" name="section_name" required placeholder="例如：投标保证金">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">章节类型</label>
+                        <select class="form-select" name="section_type">
+                            <option value="投标函">投标函</option>
+                            <option value="报价表">报价表</option>
+                            <option value="营业执照">营业执照</option>
+                            <option value="CMA证书">CMA证书</option>
+                            <option value="信誉承诺书">信誉承诺书</option>
+                            <option value="人员资料">人员资料</option>
+                            <option value="技术方案">技术方案</option>
+                            <option value="业绩证明">业绩证明</option>
+                            <option value="法定代表人证明">法定代表人证明</option>
+                            <option value="授权委托书">授权委托书</option>
+                            <option value="售后服务">售后服务</option>
+                            <option value="其他" selected>其他</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.toc-item-wrapper {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.15s;
+}
+.toc-item-wrapper:last-child { border-bottom: none; }
+.toc-item-wrapper:hover { background: #f8fafc; }
+.toc-item-wrapper.dragging { opacity: 0.4; background: #e3f2fd; }
+.toc-item-wrapper.drag-over { border-top: 2px solid #2196f3; }
+a.toc-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px 12px 16px;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: inherit;
+    flex: 1;
+    min-width: 0;
+}
+.toc-icon { flex-shrink: 0; }
+.toc-order { flex-shrink: 0; font-size: 0.85rem; min-width: 24px; }
+.toc-name { font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+.toc-desc { flex: 1; font-size: 0.82rem; overflow: hidden; }
+.toc-desc .badge { font-weight: 400; font-size: 0.78rem; margin: 1px 2px; }
+.toc-edit { flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+.toc-item-wrapper:hover .toc-edit { opacity: 1; }
+.toc-delete { flex-shrink: 0; padding: 0 8px; opacity: 0; transition: opacity 0.15s; }
+.toc-item-wrapper:hover .toc-delete { opacity: 1; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 拖拽排序
+const tocList = document.getElementById('tocList');
+if (tocList) {
+    let dragEl = null;
+    tocList.querySelectorAll('.toc-item-wrapper').forEach(el => {
+        el.addEventListener('dragstart', function() { dragEl = this; this.classList.add('dragging'); });
+        el.addEventListener('dragend', function() {
+            this.classList.remove('dragging');
+            tocList.querySelectorAll('.toc-item-wrapper').forEach(r => r.classList.remove('drag-over'));
+            // 发送新顺序到后端
+            const order = [...tocList.querySelectorAll('.toc-item-wrapper')].map(r => r.dataset.id);
+            fetch('{{ url_for("bid_sections_reorder", bid_id=bid.id) }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({order: order})
+            }).then(() => {
+                // 更新序号显示
+                tocList.querySelectorAll('.toc-order').forEach((el, i) => el.textContent = (i+1) + '.');
+            });
+        });
+        el.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            if (this !== dragEl) {
+                tocList.querySelectorAll('.toc-item-wrapper').forEach(r => r.classList.remove('drag-over'));
+                this.classList.add('drag-over');
+            }
+        });
+        el.addEventListener('drop', function(e) {
+            e.preventDefault();
+            if (this !== dragEl) {
+                const items = [...tocList.querySelectorAll('.toc-item-wrapper')];
+                const dragIdx = items.indexOf(dragEl);
+                const dropIdx = items.indexOf(this);
+                if (dragIdx < dropIdx) { this.after(dragEl); }
+                else { this.before(dragEl); }
+            }
+        });
+    });
+}
+</script>
+{% endblock %}

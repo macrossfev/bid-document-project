@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}附件库 - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h3 class="mb-0"><i class="bi bi-paperclip"></i> 附件库</h3>
+    <a href="{{ url_for('attachment_add') }}" class="btn btn-warning">
+        <i class="bi bi-plus-lg"></i> 添加附件
+    </a>
+</div>
+
+<!-- Category Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('attachment_list') }}" class="d-flex align-items-end gap-2">
+            <div class="flex-grow-1">
+                <label for="category" class="form-label">按类别筛选</label>
+                <select class="form-select" id="category" name="category">
+                    <option value="">全部类别</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {{ 'selected' if current_category == cat }}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-warning">
+                <i class="bi bi-funnel"></i> 筛选
+            </button>
+            {% if current_category %}
+            <a href="{{ url_for('attachment_list') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-x-lg"></i> 清除
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        {% if attachments %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>名称</th>
+                        <th>类别</th>
+                        <th>有效期至</th>
+                        <th>版本</th>
+                        <th>标签</th>
+                        <th style="width:180px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for att in attachments %}
+                    {% set is_expired = att.expiry_date and att.expiry_date < now %}
+                    {% set is_expiring = att.expiry_date and not is_expired and att.expiry_date <= now_plus_90 %}
+                    <tr class="{{ 'table-danger' if is_expired else ('table-warning' if is_expiring else '') }}">
+                        <td class="fw-semibold">{{ att.name }}</td>
+                        <td><span class="badge bg-secondary">{{ att.category|default('-', true) }}</span></td>
+                        <td>
+                            {{ att.expiry_date.strftime('%Y-%m-%d') if att.expiry_date else '-' }}
+                            {% if is_expired %}
+                            <span class="badge bg-danger ms-1">已过期</span>
+                            {% elif is_expiring %}
+                            <span class="badge bg-warning text-dark ms-1">即将到期</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ att.version|default('-', true) }}</td>
+                        <td>
+                            {% if att.tags %}
+                                {% for tag in att.tags.split(',')[:3] %}
+                                <span class="badge bg-light text-dark border">{{ tag.strip() }}</span>
+                                {% endfor %}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                {% if att.file_path %}
+                                <a href="{{ url_for('uploaded_file', filename=att.file_path) }}" target="_blank" class="btn btn-outline-primary" title="下载">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                {% endif %}
+                                <a href="{{ url_for('attachment_edit', id=att.id) }}" class="btn btn-outline-secondary" title="编辑">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('attachment_delete', id=att.id) }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="删除"
+                                            onclick="return confirm('确定要删除吗？')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox" style="font-size:3rem;"></i>
+            <p class="mt-2">
+                {% if current_category %}该类别下暂无附件{% else %}暂无附件数据，点击上方按钮添加{% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

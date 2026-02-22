@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑模板' if attachment else '添加模板' }} - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h3 class="mb-0">
+        <i class="bi bi-{{ 'pencil-square' if attachment else 'plus-circle' }}"></i>
+        {{ '编辑资料模板' if attachment else '添加资料模板' }}
+    </h3>
+    <a href="{{ url_for('attachment_list') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> 返回列表
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0">模板信息</h6></div>
+    <div class="card-body">
+        <form method="POST"
+              action="{{ url_for('attachment_edit', id=attachment.id) if attachment else url_for('attachment_add') }}"
+              enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="name" name="name" required
+                           value="{{ attachment.name|default('', true) if attachment else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="category" class="form-label">类别</label>
+                    <select class="form-select" id="category" name="category">
+                        <option value="">请选择</option>
+                        {% for cat in ['信誉承诺书', '投标函模板', '法定代表人证明', '授权委托书', '技术方案', '营业执照', 'CMA证书', '业绩证明', '人员资料', '报价表', '其他'] %}
+                        <option value="{{ cat }}" {{ 'selected' if attachment and attachment.category == cat }}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="file" class="form-label">上传文件</label>
+                    <input type="file" class="form-control" id="file" name="file">
+                    {% if attachment and attachment.file_path %}
+                    <div class="form-text">
+                        当前文件：<a href="{{ url_for('uploaded_file', filename=attachment.file_path) }}" target="_blank">{{ attachment.file_path }}</a>
+                        （重新上传将覆盖原文件）
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="version" class="form-label">版本</label>
+                    <input type="text" class="form-control" id="version" name="version"
+                           value="{{ attachment.version|default('', true) if attachment else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="issue_date" class="form-label">发证日期</label>
+                    <input type="date" class="form-control" id="issue_date" name="issue_date"
+                           value="{{ attachment.issue_date.strftime('%Y-%m-%d') if attachment and attachment.issue_date else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="expiry_date" class="form-label">有效期至</label>
+                    <input type="date" class="form-control" id="expiry_date" name="expiry_date"
+                           value="{{ attachment.expiry_date.strftime('%Y-%m-%d') if attachment and attachment.expiry_date else '' }}">
+                </div>
+                <div class="col-12">
+                    <label for="tags" class="form-label">标签</label>
+                    <textarea class="form-control" id="tags" name="tags" rows="2"
+                              placeholder="多个标签用逗号分隔">{{ attachment.tags|default('', true) if attachment else '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <label for="notes" class="form-label">备注</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3">{{ attachment.notes|default('', true) if attachment else '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-check-lg"></i> {{ '保存修改' if attachment else '添加模板' }}
+                    </button>
+                    <a href="{{ url_for('attachment_list') }}" class="btn btn-outline-secondary ms-2">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

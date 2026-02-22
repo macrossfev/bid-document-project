@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}标书制作系统{% endblock %}</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <i class="bi bi-file-earmark-text"></i>
+            <span>标书制作系统</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a class="sidebar-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+                <i class="bi bi-house-door"></i><span>工作台</span>
+            </a>
+            <a class="sidebar-link {% if request.endpoint and 'bid' in request.endpoint %}active{% endif %}" href="{{ url_for('bid_list') }}">
+                <i class="bi bi-folder2-open"></i><span>投标项目</span>
+            </a>
+            <a class="sidebar-link {% if request.endpoint and 'attachment' in request.endpoint %}active{% endif %}" href="{{ url_for('attachment_list') }}">
+                <i class="bi bi-archive"></i><span>资料模板库</span>
+            </a>
+            <a class="sidebar-link {% if request.endpoint and 'personnel' in request.endpoint %}active{% endif %}" href="{{ url_for('personnel_list') }}">
+                <i class="bi bi-people"></i><span>人员库</span>
+            </a>
+            <a class="sidebar-link {% if request.endpoint and 'performance' in request.endpoint %}active{% endif %}" href="{{ url_for('performance_list') }}">
+                <i class="bi bi-trophy"></i><span>业绩库</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-user">
+                <i class="bi bi-person-circle"></i>
+                <span>{{ session.get('username', '') }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="sidebar-link logout-link">
+                <i class="bi bi-box-arrow-left"></i><span>退出登录</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-wrapper">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button class="btn btn-link sidebar-toggle" id="sidebarToggle">
+                <i class="bi bi-list fs-4"></i>
+            </button>
+            <h5 class="topbar-title mb-0">{% block page_title %}{% endblock %}</h5>
+        </header>
+
+        <div class="main-content">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </div>
+
+        <footer class="main-footer">
+            标书制作系统 v1.0
+        </footer>
+    </div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('sidebarToggle').addEventListener('click', function() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+            document.querySelector('.main-wrapper').classList.toggle('expanded');
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

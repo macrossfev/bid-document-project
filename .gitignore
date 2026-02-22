@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# 数据库
+*.db
+
+# 上传文件和输出文件
+uploads/
+output/
+基本资料/
+
+# 大文件
+*.docx
+*.pdf
+*.doc
+*.xlsx
+
+# 系统文件
+.DS_Store
+Thumbs.db

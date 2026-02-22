@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}确认章节结构 - {{ bid.project_name }} - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <div>
+        <h4 class="mb-1">确认投标文件章节结构</h4>
+        <p class="text-muted mb-0 small">{{ bid.project_name }}</p>
+    </div>
+    <div>
+        {% if bid.tender_file_path %}
+        <form method="POST" action="{{ url_for('bid_reparse', id=bid.id) }}" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-outline-warning me-1"><i class="bi bi-arrow-repeat"></i> 重新解析</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('bid_list') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回列表</a>
+    </div>
+</div>
+
+{% if message %}
+<div class="alert alert-info py-2 small">
+    <i class="bi bi-info-circle"></i> {{ message }}
+</div>
+{% endif %}
+
+{% if raw_context %}
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center" role="button"
+         data-bs-toggle="collapse" data-bs-target="#rawContext">
+        <h6 class="mb-0"><i class="bi bi-file-text"></i> 招标文件原文（解析命中区域）</h6>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+    <div class="collapse" id="rawContext">
+        <div class="card-body">
+            <pre class="mb-0 small" style="white-space: pre-wrap; color: #555;">{{ raw_context }}</pre>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('bid_confirm_sections', id=bid.id) }}">
+    <div class="card mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="bi bi-list-ol"></i> 章节列表 <span class="badge bg-info">{{ sections|length }}</span></h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="addSectionBtn">
+                <i class="bi bi-plus-lg"></i> 添加章节
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="sectionsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px"></th>
+                            <th style="width:50px">序号</th>
+                            <th>章节名称</th>
+                            <th style="width:160px">章节类型</th>
+                            <th style="width:80px">置信度</th>
+                            <th style="width:60px">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sectionsTbody">
+                        {% for sec in sections %}
+                        <tr class="section-row" draggable="true">
+                            <td class="text-center text-muted" style="cursor: grab;"><i class="bi bi-grip-vertical"></i></td>
+                            <td class="row-number">{{ loop.index }}</td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" name="section_name"
+                                       value="{{ sec.section_name }}" required>
+                                <input type="hidden" name="original_text" value="{{ sec.original_text|default('', true) }}">
+                                <input type="hidden" name="requirement_text" value="{{ sec.requirement_text|default('', true) }}">
+                                {% if sec.requirement_text %}
+                                <div class="mt-1 small text-muted" style="max-height:60px;overflow-y:auto;line-height:1.3;">
+                                    <i class="bi bi-bookmark"></i> {{ sec.requirement_text[:150] }}{% if sec.requirement_text|length > 150 %}...{% endif %}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" name="section_type">
+                                    {% for t in available_types %}
+                                    <option value="{{ t }}" {{ 'selected' if sec.section_type == t }}>{{ t }}</option>
+                                    {% endfor %}
+                                    <option value="其他" {{ 'selected' if sec.section_type == '其他' or sec.section_type not in available_types }}>其他</option>
+                                </select>
+                            </td>
+                            <td class="text-center">
+                                {% if sec.match_score >= 60 %}
+                                <span class="badge bg-success">{{ sec.match_score|int }}%</span>
+                                {% elif sec.match_score >= 30 %}
+                                <span class="badge bg-warning text-dark">{{ sec.match_score|int }}%</span>
+                                {% elif sec.match_score > 0 %}
+                                <span class="badge bg-secondary">{{ sec.match_score|int }}%</span>
+                                {% else %}
+                                <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn" title="删除">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> 确认章节并自动匹配资料
+        </button>
+        <a href="{{ url_for('bid_list') }}" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.section-row.dragging { opacity: 0.4; background: #e3f2fd; }
+.section-row.drag-over { border-top: 2px solid #2196f3; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 添加新行
+document.getElementById('addSectionBtn').addEventListener('click', function() {
+    const tbody = document.getElementById('sectionsTbody');
+    const rowCount = tbody.querySelectorAll('.section-row').length + 1;
+    const typeOptions = [{% for t in available_types %}'{{ t }}',{% endfor %}'其他'];
+    let optionsHtml = typeOptions.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    const tr = document.createElement('tr');
+    tr.className = 'section-row';
+    tr.draggable = true;
+    tr.innerHTML = `
+        <td class="text-center text-muted" style="cursor:grab;"><i class="bi bi-grip-vertical"></i></td>
+        <td class="row-number">${rowCount}</td>
+        <td>
+            <input type="text" class="form-control form-control-sm" name="section_name" value="" required placeholder="输入章节名称">
+            <input type="hidden" name="original_text" value="">
+            <input type="hidden" name="requirement_text" value="">
+        </td>
+        <td><select class="form-select form-select-sm" name="section_type">${optionsHtml}</select></td>
+        <td class="text-center"><span class="badge bg-light text-muted">-</span></td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn" title="删除">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+    bindRowEvents(tr);
+    updateRowNumbers();
+    tr.querySelector('input[name="section_name"]').focus();
+});
+
+// 删除行
+function bindRowEvents(row) {
+    row.querySelector('.delete-row-btn').addEventListener('click', function() {
+        if (document.querySelectorAll('.section-row').length > 1) {
+            row.remove();
+            updateRowNumbers();
+        }
+    });
+    // 拖拽
+    row.addEventListener('dragstart', handleDragStart);
+    row.addEventListener('dragover', handleDragOver);
+    row.addEventListener('drop', handleDrop);
+    row.addEventListener('dragend', handleDragEnd);
+}
+
+document.querySelectorAll('.section-row').forEach(bindRowEvents);
+
+function updateRowNumbers() {
+    document.querySelectorAll('.row-number').forEach((el, i) => el.textContent = i + 1);
+}
+
+// 拖拽排序
+let dragRow = null;
+function handleDragStart(e) { dragRow = this; this.classList.add('dragging'); }
+function handleDragOver(e) {
+    e.preventDefault();
+    const row = e.target.closest('.section-row');
+    if (row && row !== dragRow) {
+        document.querySelectorAll('.section-row').forEach(r => r.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+    }
+}
+function handleDrop(e) {
+    e.preventDefault();
+    const row = e.target.closest('.section-row');
+    if (row && row !== dragRow) {
+        const tbody = document.getElementById('sectionsTbody');
+        const rows = [...tbody.querySelectorAll('.section-row')];
+        const dragIdx = rows.indexOf(dragRow);
+        const dropIdx = rows.indexOf(row);
+        if (dragIdx < dropIdx) {
+            row.after(dragRow);
+        } else {
+            row.before(dragRow);
+        }
+        updateRowNumbers();
+    }
+}
+function handleDragEnd() {
+    document.querySelectorAll('.section-row').forEach(r => {
+        r.classList.remove('dragging');
+        r.classList.remove('drag-over');
+    });
+}
+</script>
+{% endblock %}

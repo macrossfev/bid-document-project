@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}工作台 - 标书制作系统{% endblock %}
+
+{% block content %}
+<!-- Welcome -->
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <div>
+        <h3 class="mb-1">欢迎使用标书制作系统</h3>
+        <p class="text-muted mb-0">快速创建投标项目，管理资料模板</p>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-3 mb-4">
+    <div class="col-auto">
+        <a href="{{ url_for('bid_add') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-plus-circle me-2"></i>新建投标项目
+        </a>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('attachment_list') }}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-archive me-2"></i>资料模板库
+        </a>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="card text-center py-3">
+            <div class="text-primary"><i class="bi bi-folder2-open fs-3"></i></div>
+            <div class="fw-bold fs-4 mt-1">{{ bid_count|default(0) }}</div>
+            <div class="text-muted small">投标项目</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card text-center py-3">
+            <div class="text-warning"><i class="bi bi-archive fs-3"></i></div>
+            <div class="fw-bold fs-4 mt-1">{{ template_count|default(0) }}</div>
+            <div class="text-muted small">资料模板</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card text-center py-3">
+            <div class="text-success"><i class="bi bi-people fs-3"></i></div>
+            <div class="fw-bold fs-4 mt-1">{{ personnel_count|default(0) }}</div>
+            <div class="text-muted small">人员数</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Bid Projects -->
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-clock-history"></i> 最近投标项目</h6>
+        <a href="{{ url_for('bid_list') }}" class="btn btn-sm btn-outline-primary">查看全部</a>
+    </div>
+    <div class="card-body p-0">
+        {% if recent_bids %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>项目名称</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bid in recent_bids %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('bid_detail', id=bid.id) }}" class="text-decoration-none fw-medium">
+                                {{ bid.project_name }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if bid.status == 'draft' %}
+                                <span class="badge bg-secondary">草稿</span>
+                            {% elif bid.status == 'in_progress' %}
+                                <span class="badge bg-primary">进行中</span>
+                            {% elif bid.status == 'completed' %}
+                                <span class="badge bg-success">已完成</span>
+                            {% else %}
+                                <span class="badge bg-light text-dark">{{ bid.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">{{ bid.created_at.strftime('%Y-%m-%d') if bid.created_at else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            暂无投标项目，点击上方按钮创建
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}编辑章节 - {{ section.section_name }} - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <div>
+        <h4 class="mb-1">{{ section.section_name }}</h4>
+        <p class="text-muted mb-0 small">
+            {{ bid.project_name }}
+            {% if section.section_type %} | 类型：<span class="badge bg-primary-subtle text-primary">{{ section.section_type }}</span>{% endif %}
+            {% if section.source == 'parsed' %} | <span class="badge" style="background:#f3e8ff;color:#7c3aed;">自动解析</span>{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-1">
+        {% if prev_section %}
+        <a href="{{ url_for('bid_section_edit', bid_id=bid.id, section_id=prev_section.id) }}" class="btn btn-sm btn-outline-secondary" title="{{ prev_section.section_name }}">
+            <i class="bi bi-chevron-left"></i> 上一章
+        </a>
+        {% endif %}
+        {% if next_section %}
+        <a href="{{ url_for('bid_section_edit', bid_id=bid.id, section_id=next_section.id) }}" class="btn btn-sm btn-outline-secondary" title="{{ next_section.section_name }}">
+            下一章 <i class="bi bi-chevron-right"></i>
+        </a>
+        {% endif %}
+        <a href="{{ url_for('bid_detail', id=bid.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回目录
+        </a>
+    </div>
+</div>
+
+{% if section.original_requirement %}
+<div class="alert alert-light py-2 small mb-4">
+    <i class="bi bi-quote"></i> <strong>招标文件原文：</strong>{{ section.original_requirement }}
+</div>
+{% endif %}
+
+{% if section.requirement_text %}
+<div class="alert alert-warning py-2 small mb-4">
+    <i class="bi bi-bookmark-check"></i> <strong>招标要求：</strong>
+    <div style="white-space: pre-line; margin-top: 4px;">{{ section.requirement_text }}</div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('bid_section_edit', bid_id=bid.id, section_id=section.id) }}" enctype="multipart/form-data">
+    <div class="row g-4">
+        <!-- 主要编辑区 -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-pencil"></i> 章节名称</h6>
+                </div>
+                <div class="card-body">
+                    <input type="text" class="form-control" name="section_name" value="{{ section.section_name }}">
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-archive"></i> 选择资料模板 <span class="text-muted small fw-normal">（推荐类别：{{ suggested_category }}）</span></h6>
+                </div>
+                <div class="card-body">
+                    <select class="form-select mb-3" name="attachment_id" id="attachment_id">
+                        <option value="">-- 不选择模板 --</option>
+                        {% if category_templates %}
+                        <optgroup label="推荐：{{ suggested_category }}">
+                            {% for t in category_templates %}
+                            <option value="{{ t.id }}" {{ 'selected' if section.attachment_id == t.id }}>
+                                {{ t.name }}{% if t.version %} ({{ t.version }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        <optgroup label="全部模板">
+                            {% for t in all_templates %}
+                            <option value="{{ t.id }}" {{ 'selected' if section.attachment_id == t.id }}>
+                                [{{ t.category or '未分类' }}] {{ t.name }}{% if t.version %} ({{ t.version }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+
+                    {% if section.attachment %}
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="bi bi-info-circle"></i>
+                        当前已选：<strong>{{ section.attachment.name }}</strong>
+                        {% if section.match_score and section.match_score > 0 %}
+                        （匹配度 {{ section.match_score|int }}%）
+                        {% endif %}
+                        {% if section.attachment.file_path %}
+                         - <a href="{{ url_for('uploaded_file', filename=section.attachment.file_path) }}" target="_blank">查看文件</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <hr class="my-3">
+                    <h6 class="small text-muted mb-2"><i class="bi bi-upload"></i> 或上传新文件（自动保存到资料模板库）</h6>
+                    <div class="input-group input-group-sm">
+                        <input type="file" class="form-control" name="upload_file" id="uploadFile"
+                               accept=".png,.jpg,.jpeg,.gif,.pdf,.doc,.docx,.xls,.xlsx">
+                        <input type="text" class="form-control" name="upload_name" id="uploadName"
+                               placeholder="附件名称（留空则使用文件名）">
+                    </div>
+                    <div class="form-text">上传后将自动归入「{{ suggested_category }}」类别，并关联到本章节</div>
+                </div>
+            </div>
+
+            {% if personnel_matches %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-people"></i> 推荐人员</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>角色</th><th>姓名</th><th>职称</th><th>职务</th><th>匹配度</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for person in personnel_matches.project_leader %}
+                            <tr>
+                                <td><span class="badge bg-primary">项目负责人</span></td>
+                                <td>{{ person.name }}</td>
+                                <td>{{ person.title }}</td>
+                                <td>{{ person.position }}</td>
+                                <td><span class="badge bg-success">{{ person.score }}分</span></td>
+                            </tr>
+                            {% endfor %}
+                            {% for person in personnel_matches.tech_leader %}
+                            <tr>
+                                <td><span class="badge bg-info">技术负责人</span></td>
+                                <td>{{ person.name }}</td>
+                                <td>{{ person.title }}</td>
+                                <td>{{ person.position }}</td>
+                                <td><span class="badge bg-success">{{ person.score }}分</span></td>
+                            </tr>
+                            {% endfor %}
+                            {% for person in personnel_matches.members[:5] %}
+                            <tr>
+                                <td><span class="badge bg-secondary">成员</span></td>
+                                <td>{{ person.name }}</td>
+                                <td>{{ person.title }}</td>
+                                <td>{{ person.position }}</td>
+                                <td><span class="badge bg-secondary">{{ person.score }}分</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if performance_matches %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-trophy"></i> 推荐业绩</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>项目名称</th><th>委托单位</th><th>金额(万)</th><th>服务类型</th><th>匹配度</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for perf in performance_matches %}
+                            <tr>
+                                <td>{{ perf.project_name }}</td>
+                                <td>{{ perf.client_name }}</td>
+                                <td>{{ perf.contract_amount or '-' }}</td>
+                                <td><span class="small">{{ perf.service_types }}</span></td>
+                                <td><span class="badge {% if perf.score >= 50 %}bg-success{% else %}bg-secondary{% endif %}">{{ perf.score }}分</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-pencil"></i> 自定义备注</h6>
+                </div>
+                <div class="card-body">
+                    <textarea class="form-control" name="custom_content" rows="6"
+                              placeholder="在此添加该章节的备注、修改说明或自定义内容...">{{ section.custom_content|default('', true) }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态与操作 -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-toggles"></i> 完成状态</h6>
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="statusToggle"
+                               {{ 'checked' if section.status == 'done' }}
+                               onchange="document.getElementById('status_field').value = this.checked ? 'done' : 'pending';">
+                        <label class="form-check-label" for="statusToggle">
+                            <span id="statusLabel">{{ '已完成' if section.status == 'done' else '待完善' }}</span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="status" id="status_field" value="{{ section.status }}">
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-check-lg"></i> 保存
+                    </button>
+                    <a href="{{ url_for('bid_section_preview', bid_id=bid.id, section_id=section.id) }}" class="btn btn-success w-100 mt-2" target="_blank">
+                        <i class="bi bi-eye"></i> 预览本章节
+                    </a>
+                    <a href="{{ url_for('bid_detail', id=bid.id) }}" class="btn btn-outline-secondary w-100 mt-2">取消</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> 章节信息</h6>
+                </div>
+                <div class="card-body small text-muted">
+                    <p class="mb-1"><strong>序号：</strong>{{ section.section_order }}</p>
+                    <p class="mb-1"><strong>章节类型：</strong>{{ section.section_type or '未分类' }}</p>
+                    <p class="mb-1"><strong>推荐类别：</strong>{{ suggested_category }}</p>
+                    <p class="mb-1"><strong>来源：</strong>{{ '自动解析' if section.source == 'parsed' else '手动添加' }}</p>
+                    {% if section.match_score %}
+                    <p class="mb-1"><strong>匹配度：</strong>{{ section.match_score|int }}%</p>
+                    {% endif %}
+                    <p class="mb-0"><strong>当前状态：</strong>
+                        {% if section.status == 'done' %}
+                            <span class="badge bg-success">已完成</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">待完善</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('statusToggle').addEventListener('change', function() {
+    document.getElementById('statusLabel').textContent = this.checked ? '已完成' : '待完善';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}{{ perf.project_name }} - 业绩详情 - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h3 class="mb-0"><i class="bi bi-trophy"></i> 业绩详情</h3>
+    <div>
+        <a href="{{ url_for('performance_edit', id=perf.id) }}" class="btn btn-success">
+            <i class="bi bi-pencil"></i> 编辑
+        </a>
+        <a href="{{ url_for('performance_list') }}" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0">业绩信息</h6></div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="text-muted small">项目名称</div>
+                <div class="fw-semibold">{{ perf.project_name }}</div>
+            </div>
+            <div class="col-md-6">
+                <div class="text-muted small">委托单位</div>
+                <div>{{ perf.client_name|default('-', true) }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">合同金额(万元)</div>
+                <div>{{ "%.2f"|format(perf.contract_amount) if perf.contract_amount else '-' }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">服务开始日期</div>
+                <div>{{ perf.service_start.strftime('%Y-%m-%d') if perf.service_start else '-' }}</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">服务结束日期</div>
+                <div>{{ perf.service_end.strftime('%Y-%m-%d') if perf.service_end else '-' }}</div>
+            </div>
+            <div class="col-md-6">
+                <div class="text-muted small">服务类型</div>
+                <div>
+                    {% if perf.service_types %}
+                        {% for st in perf.service_types.split(',') %}
+                        <span class="badge bg-light text-dark border me-1">{{ st.strip() }}</span>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="text-muted small">检测参数</div>
+                <div>
+                    {% if perf.testing_params %}
+                        {% for tp in perf.testing_params.split(',') %}
+                        <span class="badge bg-light text-dark border me-1">{{ tp.strip() }}</span>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="text-muted small">项目描述</div>
+                <div style="white-space:pre-wrap;">{{ perf.description|default('-', true) }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-folder2"></i> 相关文件</h6></div>
+    <div class="card-body p-0">
+        {% if perf.files %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>文件类型</th>
+                        <th>文件名称</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in perf.files %}
+                    <tr>
+                        <td><span class="badge bg-secondary">{{ file.file_type|default('-', true) }}</span></td>
+                        <td>{{ file.file_name|default('-', true) }}</td>
+                        <td>
+                            <a href="{{ url_for('uploaded_file', filename=file.file_path) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i> 下载
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">暂无相关文件</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑业绩' if performance else '添加业绩' }} - 标书制作系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h3 class="mb-0">
+        <i class="bi bi-{{ 'pencil-square' if performance else 'plus-circle' }}"></i>
+        {{ '编辑业绩' if performance else '添加业绩' }}
+    </h3>
+    <a href="{{ url_for('performance_list') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> 返回列表
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0">业绩信息</h6></div>
+    <div class="card-body">
+        <form method="POST"
+              action="{{ url_for('performance_edit', id=performance.id) if performance else url_for('performance_add') }}"
+              enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="project_name" class="form-label">项目名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="project_name" name="project_name" required
+                           value="{{ performance.project_name|default('', true) if performance else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="client_name" class="form-label">委托单位 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="client_name" name="client_name" required
+                           value="{{ performance.client_name|default('', true) if performance else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="contract_amount" class="form-label">合同金额(万元)</label>
+                    <input type="number" class="form-control" id="contract_amount" name="contract_amount" step="0.01" min="0"
+                           value="{{ performance.contract_amount|default('', true) if performance else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="service_start" class="form-label">服务开始日期</label>
+                    <input type="date" class="form-control" id="service_start" name="service_start"
+                           value="{{ performance.service_start.strftime('%Y-%m-%d') if performance and performance.service_start else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="service_end" class="form-label">服务结束日期</label>
+                    <input type="date" class="form-control" id="service_end" name="service_end"
+                           value="{{ performance.service_end.strftime('%Y-%m-%d') if performance and performance.service_end else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="service_types" class="form-label">服务类型</label>
+                    <textarea class="form-control" id="service_types" name="service_types" rows="2"
+                              placeholder="污水检测,水库检测,管网检测...">{{ performance.service_types|default('', true) if performance else '' }}</textarea>
+                    <div class="form-text">多个类型请用逗号分隔</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="testing_params" class="form-label">检测参数</label>
+                    <textarea class="form-control" id="testing_params" name="testing_params" rows="2"
+                              placeholder="COD,BOD5,氨氮,总磷...">{{ performance.testing_params|default('', true) if performance else '' }}</textarea>
+                    <div class="form-text">多个参数请用逗号分隔</div>
+                </div>
+                <div class="col-12">
+                    <label for="description" class="form-label">项目描述</label>
+                    <textarea class="form-control" id="description" name="description" rows="4">{{ performance.description|default('', true) if performance else '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg"></i> {{ '保存修改' if performance else '添加业绩' }}
+                    </button>
+                    <a href="{{ url_for('performance_list') }}" class="btn btn-outline-secondary ms-2">取消</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if performance %}
+<!-- File Management Section -->
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-folder2"></i> 相关文件</h6>
+    </div>
+    <div class="card-body p-0">
+        {% if performance.files %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>文件类型</th>
+                        <th>文件名称</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in performance.files %}
+                    <tr>
+                        <td><span class="badge bg-secondary">{{ file.file_type|default('-', true) }}</span></td>
+                        <td>{{ file.file_name|default('-', true) }}</td>
+                        <td>
+                            <a href="{{ url_for('uploaded_file', filename=file.file_path) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i> 下载
+                            </a>
+                            <form method="POST" action="{{ url_for('performance_file_delete', file_id=file.id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                        onclick="return confirm('确定要删除吗？')">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">暂无相关文件</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add File Form -->
+<div class="card mb-4">
+    <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-upload"></i> 上传文件</h6></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('performance_file_add', id=performance.id) }}" enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="file_type" class="form-label">文件类型</label>
+                    <select class="form-select" id="file_type" name="file_type">
+                        <option value="">请选择</option>
+                        <option value="合同">合同</option>
+                        <option value="发票">发票</option>
+                        <option value="中标通知书">中标通知书</option>
+                        <option value="验收报告">验收报告</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="perf_file" class="form-label">选择文件</label>
+                    <input type="file" class="form-control" id="perf_file" name="file">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-upload"></i> 上传
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
